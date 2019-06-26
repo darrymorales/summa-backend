@@ -104,83 +104,91 @@ exports.customLogin = functions.https.onRequest(async (req, res) => {
 
 // Firebase Function que permite guardar los datos del formulario de registro del medidor
 exports.recordData = functions.https.onRequest(async (req, res) => {
-    let objRes = {'status':false, 'message':'', 'data':{}};
+    cors(req, res, async () => {
+        console.log('DEB body: ', req.body.accessToken);
+        console.log('DEB query: ', req.query.accessToken);
+        console.log('DEB param: ', req.param.accessToken);
+        console.log('DEB params: ', req.params.accessToken);
 
-    if (req.method == 'POST') {
-        const accessToken = req.body.accessToken;
-        const imageBase64 = req.body.imageBase64;
-        const nic = req.body.nic;
+        let objRes = {'status':false, 'message':'', 'data':{}};
 
-        const objFb = await admin.auth().verifyIdToken(accessToken)
-        .then(function(decodedToken) {
-            return decodedToken;
-        }).catch(function(error) {
-            return null;
-        });
+        if (req.method == 'POST') {
+            const accessToken = req.body.accessToken;
+            //const imageBase64 = req.body.imageBase64.split(',')[1];
+            const imageBase64 = req.body.imageBase64;
+            const nic = req.body.nic;
 
-        if( objFb != null ){
-            // Guardar imagen en storage cloud
-            let today = new Date();
-            let dd = ("0" + today.getDate()).slice(-2);
-            let mm = ("0" + (today.getMonth() + 1)).slice(-2);
-            let yyyy = today.getFullYear();
-            const imgName = dd+'-'+mm+'-'+yyyy+'_'+nic;
-
-            var mimeType = 'image/jpeg',
-                imageBuffer = new Buffer(imageBase64, 'base64');
-
-            var bucket = admin.storage().bucket();
-
-            // Upload the image to the bucket
-            var file = bucket.file('img/' + imgName +'.jpg');
-            await file.save(imageBuffer, {
-                metadata: { contentType: mimeType },
-            }, ((error) => {
-                if (error) {
-                    objRes.message = 'Error storage bucket';
-                    objRes.data = error;
-                }
-            }));
-
-            let linkImage = await file.getSignedUrl({
-                action: 'read',
-                expires: '01-01-2491'
-            }).then(function(signedUrls) {
-                return signedUrls[0];
-            });
-
-            // Guardar en Firebase Realtime Database
-            const dbRef = admin.database().ref('/registros')
-            const message = {
-                usuario: objFb.uid,
-                nic: nic,
-                fecha: (new Date).toString(),
-                image: linkImage,
-            }
-
-            const fbSave = await dbRef.push(message)
-            .then(function(dat) {
-                return dat;
-            }).catch(function(err) {
+            const objFb = await admin.auth().verifyIdToken(accessToken)
+            .then(function(decodedToken) {
+                return decodedToken;
+            }).catch(function(error) {
                 return null;
             });
 
-            if(fbSave) {
-                objRes.status = true;
-                objRes.message = 'Información almacenada correctamente';
-                objRes.data = {
-                    'idFbDb':fbSave.getKey()
+            if( objFb != null ){
+                // Guardar imagen en storage cloud
+                let today = new Date();
+                let dd = ("0" + today.getDate()).slice(-2);
+                let mm = ("0" + (today.getMonth() + 1)).slice(-2);
+                let yyyy = today.getFullYear();
+                const imgName = dd+'-'+mm+'-'+yyyy+'_'+nic;
+
+                var mimeType = 'image/jpeg',
+                    imageBuffer = new Buffer(imageBase64, 'base64');
+
+                var bucket = admin.storage().bucket();
+
+                // Upload the image to the bucket
+                var file = bucket.file('img/' + imgName +'.jpg');
+                await file.save(imageBuffer, {
+                    metadata: { contentType: mimeType },
+                }, ((error) => {
+                    if (error) {
+                        objRes.message = 'Error storage bucket';
+                        objRes.data = error;
+                    }
+                }));
+
+                let linkImage = await file.getSignedUrl({
+                    action: 'read',
+                    expires: '01-01-2491'
+                }).then(function(signedUrls) {
+                    return signedUrls[0];
+                });
+
+                // Guardar en Firebase Realtime Database
+                const dbRef = admin.database().ref('/registros')
+                const message = {
+                    usuario: objFb.uid,
+                    nic: nic,
+                    fecha: (new Date).toString(),
+                    image: linkImage,
                 }
+
+                const fbSave = await dbRef.push(message)
+                .then(function(dat) {
+                    return dat;
+                }).catch(function(err) {
+                    return null;
+                });
+
+                if(fbSave) {
+                    objRes.status = true;
+                    objRes.message = 'Información almacenada correctamente';
+                    objRes.data = {
+                        'idFbDb':fbSave.getKey()
+                    }
+                } else {
+                    objRes.message = 'Error de storage bucket';
+                }
+                
             } else {
-                objRes.message = 'Error de storage bucket';
+                objRes.message = 'Token inválido';
             }
-            
         } else {
-            objRes.message = 'Token inválido';
+            objRes.message = 'Método no permitido';
         }
-    } else {
-        objRes.message = 'Método no permitido';
-    }
-    res.json(objRes);
+        res.json(objRes);
+    });
 });
 

@@ -105,10 +105,6 @@ exports.customLogin = functions.https.onRequest(async (req, res) => {
 // Firebase Function que permite guardar los datos del formulario de registro del medidor
 exports.recordData = functions.https.onRequest(async (req, res) => {
     cors(req, res, async () => {
-        console.log('DEB body: ', req.body.accessToken);
-        console.log('DEB query: ', req.query.accessToken);
-        console.log('DEB param: ', req.param.accessToken);
-        console.log('DEB params: ', req.params.accessToken);
 
         let objRes = {'status':false, 'message':'', 'data':{}};
 
@@ -137,8 +133,6 @@ exports.recordData = functions.https.onRequest(async (req, res) => {
                     imageBuffer = new Buffer(imageBase64, 'base64');
 
                 var bucket = admin.storage().bucket();
-
-                // Upload the image to the bucket
                 var file = bucket.file('img/' + imgName +'.jpg');
                 await file.save(imageBuffer, {
                     metadata: { contentType: mimeType },
@@ -153,6 +147,7 @@ exports.recordData = functions.https.onRequest(async (req, res) => {
                     action: 'read',
                     expires: '01-01-2491'
                 }).then(function(signedUrls) {
+                    console.log('DEB URL: ', signedUrls);
                     return signedUrls[0];
                 });
 
@@ -181,6 +176,49 @@ exports.recordData = functions.https.onRequest(async (req, res) => {
                 } else {
                     objRes.message = 'Error de storage bucket';
                 }
+
+                // Guardar en sharepoint
+                console.log('INIT SP');
+                var http = require('http');  
+                var spauth = require('node-sp-auth');  
+                var requestprom = require('request-promise');
+
+                var url = 'https://celsia.sharepoint.com/sites/SummaDev/';  
+                var username = "dnorena@celsia.com";  
+                var password = "Celsi@poc2019";
+
+                // Authenticate with hardcoded credentials  
+                spauth.getAuth(url, {          
+                    username:username,  
+                    password:password  
+                })  
+                .then(function(options){  
+                    // Headers  
+                    var headers = options.headers; 
+                    
+                    console.log(options.headers);
+                    
+                    headers['accept'] = 'application/json;odata=verbose';  
+                    headers['content-Type'] = 'application/json;odata=verbose';
+                    headers['x-requestdigest'] = '0x3668CCEF40574B0B213ECE3EDBFDAE097D5ED0A1A2972DB4ECBAB398F1F556B10D3C10475BC131ECB8552646A898EF73C6CE55B79DE2B0C97DE595B218AD71E2,26 Jun 2019 22:38:54 -0000';
+
+                    // Pull the SharePoint list items  
+                    requestprom.post({ 
+                    url: url + "/_api/web/lists/getByTitle('RevisionMedidorPragma')/items",
+                        //body: { '__metadata': { 'type': 'SP.Data.RevisionMedidorPragmaListItem' }, 'Title': 'pragma', 'Usuario':message.usuario, 'NIC' : message.nic, 'img': {'__metadata': { 'type': 'SP.FieldUrlValue' },'Description': 'Foto','Url': encodeURI(message.image)} },
+                        body: { '__metadata': { 'type': 'SP.Data.RevisionMedidorPragmaListItem' }, 'Title': 'pragma', 'Usuario':message.usuario, 'NIC' : message.nic, 'img': {'__metadata': { 'type': 'SP.FieldUrlValue' },'Description': 'Foto','Url': 'https://eficienciaenergetica.celsia.com/hs-fs/hubfs/celsia-logo-corporativo.png?width=379&name=celsia-logo-corporativo.png'} },
+                        headers: headers,  
+                        json: true  
+
+                    }).then(function(response){
+                        console.log('DEB SP respon:', response); 
+                    }).catch(function(err) {
+                        console.log('DEB SP ERROR:', err); 
+                    });
+                }).catch(function(err) {
+                    console.log('DEB SP AUTH ERROR:', err); 
+                });
+
                 
             } else {
                 objRes.message = 'Token inválido';
